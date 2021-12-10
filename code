@@ -1,0 +1,55 @@
+clc;
+clear;
+close all;
+close all hidden;
+%% Loading ground truth lables from file into workspace
+data = load('ourgroundtruthlabels.mat');
+%%
+S = dir(fullfile('C:\Users\karth\Downloads\TK11173\TK11173\Code\oilspill_dataset\*.jpg'));
+%Listing dataset folder contents
+Extract_name = extractfield(S,'name'); %Extracting Field values from structure array
+Extract_name = Extract_name';
+Extract_folder = extractfield(S,'folder');
+Extract_folder = Extract_folder';
+merge_cell = fullfile(Extract_folder,Extract_name);
+merge_cell_table = cell2table(merge_cell);%Converting cell array type to table type
+data_oilspill = data.gTruth.ROILabelData.oilspill_dataset.oilspill;
+data_oilspill = cell2table(data_oilspill);
+trainingData = [merge_cell_table,data_oilspill];
+shuffledIdx = randperm(height(trainingData));
+trainingData = trainingData(shuffledIdx,:);
+imds = imageDatastore(trainingData.merge_cell); %Datastore for image data
+blds = boxLabelDatastore(trainingData(:,2:end)); %Datastore for bounding box label data
+ds = combine(imds, blds); %combines two delegates into a new delegate (imds&blds)
+load('Yolov2_lgraph.mat'); %Loading YOLO layer graph from file into workspace
+lgraph = Yolov2_lgraph.lgraph;
+analyzeNetwork(lgraph); %Analyze deep learning network architecture (YOLO)
+lgraph.Layers
+options = trainingOptions('sgdm',... %Options for training deep learning neural network (YOLO)
+'InitialLearnRate',0.001,...
+'Verbose',true,...
+'MiniBatchSize',16,...
+'MaxEpochs',30,...
+'Shuffle','never',...
+'VerboseFrequency',30,...
+'CheckpointPath',tempdir);
+% [detector,info] = trainYOLOv2ObjectDetector(ds,lgraph,options);
+load detector;
+load info;
+figure
+plot(info.TrainingLoss)
+grid on
+xlabel('Number of Iterations')
+ylabel('Training Loss for Each Iteration')
+[file,path] = uigetfile ('.','Select an image'); %Opening file selection dialog box
+img = imread([path,file]); %Read image from file
+% img = imresize(img,[190 190]);
+figure;imshow(img);title('Input Image');
+[bboxes,scores] = detect(detector,img); %Detecting objects using YOLO object detector
+if(~isempty(bboxes))
+img = insertObjectAnnotation(img,'rectangle',bboxes,scores); %truecolor image annotated with
+shape and label at the location specified by position.
+end
+figure
+imshow(img);
+title('Oil - Spill Detected Image');
